@@ -35,7 +35,7 @@ Sync options:
   SYNC_LOOKBACK                or  --lookback         Go duration (e.g. 15m, 24h). Search window ends at now. (default: 24h)
   SYNC_RANDOM_SEED             or  --random-seed      Fixed seed for sampling (omit for run-based seed)
   SYNC_TARGET_INDEX            or  --target-index     Single target index/stream (default: preserve original index names)
-  SYNC_BATCH_SIZE              or  --batch-size       (default: 100)
+  SYNC_BATCH_SIZE              or  --batch-size       (default: same as --size)
 
 Other:
   --env-file                   Path to a dotenv file to load before parsing env vars (default: .env)
@@ -210,7 +210,8 @@ func ParseConfig(argv []string) (*Config, error) {
 	lookbackStr := envOr(raw.lookback, "SYNC_LOOKBACK", "24h")
 	randomSeedStr := envOr(raw.randomSeed, "SYNC_RANDOM_SEED", "")
 	targetIndex := envOr(raw.targetIndex, "SYNC_TARGET_INDEX", "")
-	batchSizeStr := envOr(raw.batchSize, "SYNC_BATCH_SIZE", "100")
+	// batch size defaults to SYNC_SIZE when neither flag nor env is set.
+	batchSizeStr := envOr(raw.batchSize, "SYNC_BATCH_SIZE", sizeStr)
 
 	destHost := envOr(nil, "ELASTICSEARCH_HOST", "http://localhost:9200")
 	destAPIKey := envOr(raw.destAPIKey, "ELASTICSEARCH_API_KEY", "")
