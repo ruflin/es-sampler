@@ -91,7 +91,7 @@ When `ELASTICSEARCH_API_KEY` / `--dest-api-key` is set it takes precedence over 
 | `SYNC_LOOKBACK` | `--lookback` | `24h` |
 | `SYNC_RANDOM_SEED` | `--random-seed` | — |
 | `SYNC_TARGET_INDEX` | `--target-index` | preserve original |
-| `SYNC_BATCH_SIZE` | `--batch-size` | `100` |
+| `SYNC_BATCH_SIZE` | `--batch-size` | same as `SYNC_SIZE` |
 
 ### Other
 

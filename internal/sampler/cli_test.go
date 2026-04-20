@@ -211,6 +211,38 @@ func TestParseConfig_DestAPIKeyCLIOverridesEnv(t *testing.T) {
 	}
 }
 
+func TestParseConfig_BatchSizeDefaultsToSize(t *testing.T) {
+	withCleanEnv(t)
+	chdirTemp(t)
+	t.Setenv("SOURCE_ELASTICSEARCH_HOST", "http://src:9200")
+	t.Setenv("SOURCE_ELASTICSEARCH_API_KEY", "k")
+
+	cfg, err := ParseConfig([]string{"--size=250"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Size != 250 || cfg.BatchSize != 250 {
+		t.Fatalf("want size=batch=250, got size=%d batch=%d", cfg.Size, cfg.BatchSize)
+	}
+}
+
+func TestParseConfig_BatchSizeExplicitOverride(t *testing.T) {
+	withCleanEnv(t)
+	chdirTemp(t)
+	t.Setenv("SOURCE_ELASTICSEARCH_HOST", "http://src:9200")
+	t.Setenv("SOURCE_ELASTICSEARCH_API_KEY", "k")
+	t.Setenv("SYNC_SIZE", "500")
+	t.Setenv("SYNC_BATCH_SIZE", "50")
+
+	cfg, err := ParseConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Size != 500 || cfg.BatchSize != 50 {
+		t.Fatalf("want size=500 batch=50, got size=%d batch=%d", cfg.Size, cfg.BatchSize)
+	}
+}
+
 func TestParseConfig_SizeMustBePositive(t *testing.T) {
 	withCleanEnv(t)
 	chdirTemp(t)
