@@ -1,0 +1,22 @@
+# Go build output
+/bin/
+/dist/
+es-sampler
+*.exe
+*.test
+*.out
+*.prof
+
+# Go module tidy-check safety backups (see Makefile)
+go.mod.bak
+go.sum.bak
+
+# Local env / secrets
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
