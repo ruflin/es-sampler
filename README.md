@@ -59,6 +59,47 @@ Precedence (highest first): **CLI flag > shell env var > `.env` file > default**
 by `--env-file`. Values in the file never override variables that are already
 set in the shell/CI, so `export FOO=...` still wins.
 
+### Recommended: enable the failure store on the destination
+
+When sampling from many source indices — especially when funneling everything
+into a single target index via `SYNC_TARGET_INDEX` / `--target-index` — mapping
+conflicts are likely (e.g. the same field typed differently across sources).
+Enabling the [data stream failure store](https://www.elastic.co/docs/manage-data/data-store/data-streams/failure-store)
+on the destination cluster keeps those rejected documents instead of dropping
+them, so you can inspect and fix mapping issues later.
+
+**Stateful / self-managed Elasticsearch** — enable cluster-wide with a single
+setting:
+
+```json
+PUT _cluster/settings
+{
+  "persistent": {
+    "data_streams.failure_store.enabled": [
+      "*"
+    ]
+  }
+}
+```
+
+**Serverless** — the `_cluster/settings` API is not available (it returns
+`api_not_available_exception`, HTTP 410). Enable the failure store per data
+stream instead, via the [put data stream options](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-put-data-stream-options)
+API. For example, for the data stream you sync into with
+`SYNC_TARGET_INDEX` / `--target-index`:
+
+```json
+PUT _data_stream/<your-target-data-stream>/_options
+{
+  "failure_store": {
+    "enabled": true
+  }
+}
+```
+
+For new data streams, you can also bake this into the matching index template
+under `template.data_stream_options.failure_store.enabled: true`.
+
 ## Configuration
 
 CLI flag > env var > default.
