@@ -128,13 +128,18 @@ func search(
 	return docs
 }
 
-// transform mutates docs in place: strip data_stream fields and override the
+// transform mutates docs in place: strip data_stream fields, drop any
+// cross-cluster `<alias>:` prefix from the source index, and override the
 // destination index when TargetIndex is set.
 func transform(docs []*document, cfg *Config) {
 	for _, doc := range docs {
 		stripDataStreamFields(doc)
 		if cfg.TargetIndex != "" {
 			doc.Index = cfg.TargetIndex
+			continue
+		}
+		if i := strings.IndexByte(doc.Index, ':'); i >= 0 {
+			doc.Index = doc.Index[i+1:]
 		}
 	}
 }
@@ -151,8 +156,14 @@ func stripDataStreamFields(doc *document) {
 }
 
 // backingIndexToStreamName maps a `.ds-<stream>-<date>-<gen>` backing index
-// to `<stream>`.
+// to `<stream>`. When the index came from a cross-cluster search hit it is
+// prefixed with `<cluster_alias>:` — strip that prefix so the destination
+// cluster receives a local name it can write to (without it, the destination
+// rejects the write with "Cross-cluster calls are not supported").
 func backingIndexToStreamName(index string) string {
+	if i := strings.IndexByte(index, ':'); i >= 0 {
+		index = index[i+1:]
+	}
 	if !strings.HasPrefix(index, ".ds-") {
 		return index
 	}

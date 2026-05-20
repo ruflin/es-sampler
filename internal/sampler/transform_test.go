@@ -65,3 +65,41 @@ func TestTransform_LeavesTimestampUnchanged(t *testing.T) {
 		t.Fatalf("timestamp mutated: %v", docs[0].Source["@timestamp"])
 	}
 }
+
+func TestTransform_StripsCrossClusterPrefix(t *testing.T) {
+	docs := []*document{
+		{Index: "monitor:.ds-logs-elastic_agent.filebeat-default-2026.05.07-008246", ID: "1", Source: map[string]any{}},
+		{Index: "monitor:logs-foo", ID: "2", Source: map[string]any{}},
+	}
+	transform(docs, baseConfig())
+	if docs[0].Index != ".ds-logs-elastic_agent.filebeat-default-2026.05.07-008246" {
+		t.Fatalf("backing index: %q", docs[0].Index)
+	}
+	if docs[1].Index != "logs-foo" {
+		t.Fatalf("plain index: %q", docs[1].Index)
+	}
+}
+
+func TestTransform_TargetIndexBeatsCrossClusterPrefix(t *testing.T) {
+	docs := []*document{{Index: "monitor:logs-foo", ID: "1", Source: map[string]any{}}}
+	cfg := baseConfig()
+	cfg.TargetIndex = "logs-new"
+	transform(docs, cfg)
+	if docs[0].Index != "logs-new" {
+		t.Fatalf("index: %q", docs[0].Index)
+	}
+}
+
+func TestBackingIndexToStreamName_CrossCluster(t *testing.T) {
+	cases := map[string]string{
+		"monitor:.ds-logs-elastic_agent.filebeat-default-2026.05.07-008246": "logs-elastic_agent.filebeat-default",
+		"monitor:logs-foo":           "logs-foo",
+		".ds-logs-foo-2026.01.01-01": "logs-foo",
+		"logs-foo":                   "logs-foo",
+	}
+	for in, want := range cases {
+		if got := backingIndexToStreamName(in); got != want {
+			t.Fatalf("backingIndexToStreamName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
