@@ -6,6 +6,9 @@ GO          ?= go
 GOFMT       ?= gofmt
 GO_FILES    := $(shell find . -type f -name '*.go' -not -path './.git/*')
 
+CHART_DIR   ?= helm
+HELM        ?= helm
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -63,6 +66,14 @@ tidy-check: ## Fail if go.mod / go.sum would be changed by tidy
 
 .PHONY: check
 check: lint test build ## Run lint + test + build (CI entry point)
+
+.PHONY: chart-lint
+chart-lint: ## Lint the Helm chart
+	$(HELM) lint $(CHART_DIR)
+
+.PHONY: chart-template
+chart-template: ## Render the Helm chart with example values (append HELM_ARGS=... to override)
+	$(HELM) template demo $(CHART_DIR) -f $(CHART_DIR)/ci/example-values.yaml $(HELM_ARGS)
 
 .PHONY: clean
 clean: ## Remove build artifacts

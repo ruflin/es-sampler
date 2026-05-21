@@ -141,6 +141,76 @@ When `ELASTICSEARCH_API_KEY` / `--dest-api-key` is set it takes precedence over 
 - `--verbose`, `-v` — Verbose logging (adds ISO timestamps).
 - `--help`, `-h` — Show help.
 
+## Kubernetes / Helm
+
+A Helm chart lives in [`helm/`](helm/). It deploys a single-replica Deployment with `Recreate` strategy (horizontal scaling provides no benefit for a sampler loop), runs as `nonroot` with a read-only root filesystem, and installs a default-deny `NetworkPolicy` that only allows egress to DNS (53) and HTTPS (443).
+
+### Quick start
+
+```bash
+# Create a Secret with at minimum SOURCE_ELASTICSEARCH_API_KEY and either
+# ELASTICSEARCH_API_KEY or ELASTICSEARCH_USERNAME + ELASTICSEARCH_PASSWORD.
+kubectl create secret generic es-sampler-secrets \
+  --from-literal=SOURCE_ELASTICSEARCH_API_KEY=... \
+  --from-literal=ELASTICSEARCH_API_KEY=...
+
+helm install es-sampler ./helm \
+  --set envFromSecret=es-sampler-secrets \
+  --set env.SOURCE_ELASTICSEARCH_HOST=https://source.example.cloud.es.io:443 \
+  --set env.ELASTICSEARCH_HOST=https://destination.example.cloud.es.io:443
+```
+
+Or with a values file:
+
+```yaml
+# my-values.yaml
+envFromSecret: es-sampler-secrets
+
+env:
+  SOURCE_ELASTICSEARCH_HOST: https://source.example.cloud.es.io:443
+  ELASTICSEARCH_HOST: https://destination.example.cloud.es.io:443
+
+sync:
+  size: 1000
+  intervalSeconds: 60
+  lookback: 10m
+```
+
+```bash
+helm install es-sampler ./helm -f my-values.yaml
+```
+
+Render locally without installing:
+
+```bash
+make chart-template HELM_ARGS="-f my-values.yaml"
+```
+
+### Key values
+
+Defaults mirror the binary's CLI defaults (`es-sampler --help`) so the chart's behaviour matches the standalone binary out of the box. Override anything per-deployment.
+
+| Value | Default | Maps to |
+|---|---|---|
+| `image.repository` | `ghcr.io/ruflin/es-sampler` | — |
+| `image.tag` | _(Chart.AppVersion)_ | — |
+| `replicaCount` | `1` | Do not increase — duplicates work |
+| `env` | `{}` | Plain key=value env vars (e.g. cluster URLs) |
+| `envFromSecret` | `""` | Name of an existing Secret with API keys |
+| `sync.indexPattern` | `logs*` | `SYNC_INDEX_PATTERN` |
+| `sync.size` | `100` | `SYNC_SIZE` |
+| `sync.intervalSeconds` | `1` | `SYNC_INTERVAL_SECONDS` |
+| `sync.lookback` | `24h` | `SYNC_LOOKBACK` |
+| `sync.targetIndex` | `""` | `SYNC_TARGET_INDEX` |
+| `sync.batchSize` | `""` | `SYNC_BATCH_SIZE` (defaults to `sync.size`) |
+| `sync.requestTimeout` | `""` | `SYNC_REQUEST_TIMEOUT` (defaults to 30s) |
+| `verbose` | `false` | `--verbose` |
+| `noVerifyCerts` | `false` | `--no-verify-certs` |
+| `networkPolicy.enabled` | `true` | Deny-all ingress, egress 53 + 443 only |
+| `extraObjects` | `[]` | Extra manifests rendered alongside the chart |
+
+The full list with comments is in [`helm/values.yaml`](helm/values.yaml).
+
 ## Development
 
 Common tasks are wrapped in the [Makefile](Makefile); run `make help` for the
@@ -154,6 +224,8 @@ make fmt          # gofmt -w
 make tidy         # go mod tidy
 make check        # lint + test + build (what CI runs, alongside tidy-check)
 make run ARGS="--help"
+make chart-lint   # helm lint helm/
+make chart-template HELM_ARGS="-f my-values.yaml"
 ```
 
 CI runs `make tidy-check`, `make lint`, `make test`, and `make build` on every
