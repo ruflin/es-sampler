@@ -75,7 +75,7 @@ func search(
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	ctx, cancel := context.WithTimeout(ctx, cfg.RequestTimeout)
 	defer cancel()
 
 	res, err := client.Search(
@@ -175,8 +175,8 @@ func backingIndexToStreamName(index string) string {
 	return index
 }
 
-func ensureDataStreamExists(ctx context.Context, client *es.Client, name string, log Logger) bool {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+func ensureDataStreamExists(ctx context.Context, client *es.Client, name string, log Logger, timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	res, err := client.Indices.GetDataStream(
@@ -198,7 +198,7 @@ func ensureDataStreamExists(ctx context.Context, client *es.Client, name string,
 		return false
 	}
 
-	createCtx, cancel2 := context.WithTimeout(context.Background(), requestTimeout)
+	createCtx, cancel2 := context.WithTimeout(ctx, timeout)
 	defer cancel2()
 	createRes, err := client.Indices.CreateDataStream(
 		name,
@@ -224,11 +224,12 @@ func uploadDocumentsToStream(
 	target string,
 	batchSize int,
 	log Logger,
+	timeout time.Duration,
 ) int {
 	if len(docs) == 0 {
 		return 0
 	}
-	if !ensureDataStreamExists(ctx, client, target, log) {
+	if !ensureDataStreamExists(ctx, client, target, log, timeout) {
 		return 0
 	}
 
@@ -257,55 +258,60 @@ func uploadDocumentsToStream(
 			}
 		}
 
-		bulkCtx, cancel := context.WithTimeout(ctx, requestTimeout)
-		res, err := client.Bulk(
-			bytes.NewReader(buf.Bytes()),
-			client.Bulk.WithContext(bulkCtx),
-			client.Bulk.WithRefresh("false"),
-		)
-		cancel()
-		if err != nil {
-			log.Logf("Bulk request failed: %v", err)
-			continue
-		}
-
-		var parsed struct {
-			Errors bool `json:"errors"`
-			Items  []struct {
-				Create *struct {
-					Index  string          `json:"_index"`
-					ID     string          `json:"_id"`
-					Status int             `json:"status"`
-					Error  json.RawMessage `json:"error"`
-				} `json:"create"`
-			} `json:"items"`
-		}
-		if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
-			log.Logf("Bulk request failed: %v", err)
-			res.Body.Close()
-			continue
-		}
-		res.Body.Close()
-
-		if parsed.Errors {
-			for _, item := range parsed.Items {
-				if item.Create == nil {
-					continue
-				}
-				if len(item.Create.Error) > 0 {
-					reason := extractReason(item.Create.Error)
-					id := item.Create.ID
-					if id == "" {
-						id = "auto-generated"
-					}
-					log.Logf("Bulk create error [%s] (ES _id: %s): %s", item.Create.Index, id, reason)
-					continue
-				}
-				total++
+		func() {
+			bulkCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			res, err := client.Bulk(
+				bytes.NewReader(buf.Bytes()),
+				client.Bulk.WithContext(bulkCtx),
+				client.Bulk.WithRefresh("false"),
+			)
+			if err != nil {
+				log.Logf("Bulk request failed: %v", err)
+				return
 			}
-		} else {
-			total += len(batch)
-		}
+			defer res.Body.Close()
+			if res.IsError() {
+				log.Logf("Bulk request failed: %s", res.String())
+				return
+			}
+
+			var parsed struct {
+				Errors bool `json:"errors"`
+				Items  []struct {
+					Create *struct {
+						Index  string          `json:"_index"`
+						ID     string          `json:"_id"`
+						Status int             `json:"status"`
+						Error  json.RawMessage `json:"error"`
+					} `json:"create"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
+				log.Logf("Bulk request failed: %v", err)
+				return
+			}
+
+			if parsed.Errors {
+				for _, item := range parsed.Items {
+					if item.Create == nil {
+						continue
+					}
+					if len(item.Create.Error) > 0 {
+						reason := extractReason(item.Create.Error)
+						id := item.Create.ID
+						if id == "" {
+							id = "auto-generated"
+						}
+						log.Logf("Bulk create error [%s] (ES _id: %s): %s", item.Create.Index, id, reason)
+						continue
+					}
+					total++
+				}
+			} else {
+				total += len(batch)
+			}
+		}()
 	}
 	return total
 }
@@ -338,7 +344,7 @@ func runSyncCycle(
 	transform(docs, cfg)
 
 	if cfg.TargetIndex != "" {
-		return uploadDocumentsToStream(ctx, destClient, docs, cfg.TargetIndex, cfg.BatchSize, log)
+		return uploadDocumentsToStream(ctx, destClient, docs, cfg.TargetIndex, cfg.BatchSize, log, cfg.RequestTimeout)
 	}
 
 	byStream := map[string][]*document{}
@@ -348,7 +354,7 @@ func runSyncCycle(
 	}
 	total := 0
 	for name, group := range byStream {
-		total += uploadDocumentsToStream(ctx, destClient, group, name, cfg.BatchSize, log)
+		total += uploadDocumentsToStream(ctx, destClient, group, name, cfg.BatchSize, log, cfg.RequestTimeout)
 	}
 	return total
 }
@@ -369,10 +375,10 @@ func Run(ctx context.Context, cfg *Config, log Logger) error {
 		return fmt.Errorf("dest client: %w", err)
 	}
 
-	if err := pingCluster(ctx, sourceClient, "source", log); err != nil {
+	if err := pingCluster(ctx, sourceClient, "source", log, cfg.RequestTimeout); err != nil {
 		return err
 	}
-	if err := pingCluster(ctx, destClient, "dest", log); err != nil {
+	if err := pingCluster(ctx, destClient, "dest", log, cfg.RequestTimeout); err != nil {
 		return err
 	}
 

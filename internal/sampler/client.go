@@ -12,8 +12,6 @@ import (
 	es "github.com/elastic/go-elasticsearch/v8"
 )
 
-const requestTimeout = 30 * time.Second
-
 func newClient(host, apiKey, username, password string, verifyCerts bool) (*es.Client, error) {
 	cfg := es.Config{
 		Addresses: []string{strings.TrimRight(host, "/")},
@@ -51,8 +49,8 @@ func newDestClient(cfg *Config) (*es.Client, error) {
 }
 
 // pingCluster pings a cluster and logs its name and version.
-func pingCluster(ctx context.Context, client *es.Client, label string, log Logger) error {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+func pingCluster(ctx context.Context, client *es.Client, label string, log Logger, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	res, err := client.Info(client.Info.WithContext(ctx))
