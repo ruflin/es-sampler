@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "es-sampler.fullname" . }}
+  labels:
+    {{- include "es-sampler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "es-sampler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "es-sampler.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: es-sampler
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            {{- if .Values.verbose }}
+            - --verbose
+            {{- end }}
+            {{- if .Values.noVerifyCerts }}
+            - --no-verify-certs
+            {{- end }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key | quote }}
+              value: {{ tpl (print $value) $ | quote }}
+            {{- end }}
+            - name: SYNC_INDEX_PATTERN
+              value: {{ .Values.sync.indexPattern | quote }}
+            - name: SYNC_SIZE
+              value: {{ .Values.sync.size | quote }}
+            - name: SYNC_INTERVAL_SECONDS
+              value: {{ .Values.sync.intervalSeconds | quote }}
+            - name: SYNC_LOOKBACK
+              value: {{ .Values.sync.lookback | quote }}
+            {{- with .Values.sync.randomSeed }}
+            - name: SYNC_RANDOM_SEED
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.sync.targetIndex }}
+            - name: SYNC_TARGET_INDEX
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.sync.batchSize }}
+            - name: SYNC_BATCH_SIZE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.sync.requestTimeout }}
+            - name: SYNC_REQUEST_TIMEOUT
+              value: {{ . | quote }}
+            {{- end }}
+          {{- if .Values.envFromSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ tpl .Values.envFromSecret . }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,8 @@
+envFromSecret: example-es-sampler-secrets
+
+env:
+  SOURCE_ELASTICSEARCH_HOST: https://source.example.cloud.es.io:443
+  ELASTICSEARCH_HOST: https://destination.example.cloud.es.io:443
+
+image:
+  tag: latest

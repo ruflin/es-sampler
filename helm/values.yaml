@@ -1,0 +1,92 @@
+image:
+  repository: ghcr.io/ruflin/es-sampler
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# es-sampler runs a stateful loop with random sampling. Multiple replicas
+# would duplicate work — keep at 1 unless you know what you're doing.
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+# Plain key=value environment variables (non-secret runtime config).
+# Typical use: per-environment source/destination cluster URLs.
+#   env:
+#     SOURCE_ELASTICSEARCH_HOST: https://source.cloud.es.io:443
+#     ELASTICSEARCH_HOST: https://destination.cloud.es.io:443
+env: {}
+
+# Name of a Kubernetes Secret in the same namespace; every key in the Secret
+# is exposed to the container as env vars via `envFrom: secretRef:`.
+# Bring your own Secret — e.g. created with `kubectl create secret generic`
+# or materialised by an operator. The binary requires at minimum
+# SOURCE_ELASTICSEARCH_API_KEY and either ELASTICSEARCH_API_KEY or
+# ELASTICSEARCH_USERNAME + ELASTICSEARCH_PASSWORD.
+envFromSecret: ""
+
+# Sync options — map 1:1 to SYNC_* env vars / --flag CLI options.
+# Defaults mirror the binary's CLI defaults (see `es-sampler --help`).
+# Override any of them per-deployment via `--set` or a values file.
+sync:
+  indexPattern: "logs*"
+  size: 100
+  intervalSeconds: 1
+  lookback: "24h"
+  # Optional. Leave unset to use a run-based seed.
+  randomSeed: ""
+  # Optional. If set, all docs are pushed to this single data stream / index.
+  targetIndex: ""
+  # Optional. Defaults to `sync.size` in the binary if empty.
+  batchSize: ""
+  # Optional. Per-request timeout as a Go duration (e.g. 30s, 1m).
+  # Defaults to 30s in the binary if empty.
+  requestTimeout: ""
+
+# --verbose
+verbose: false
+# --no-verify-certs
+noVerifyCerts: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Network policy — closed-loop worker: deny all ingress, egress DNS + HTTPS on 443 only.
+# If you co-locate workloads in the same namespace that also listen on 443, tighten this
+# with `to: ipBlock: cidr: 0.0.0.0/0 except: [<clusterCidr>, <serviceCidr>]`.
+networkPolicy:
+  enabled: true
+
+# Arbitrary additional manifests rendered alongside the chart's templates.
+# Useful for attaching environment-bound resources without modifying the chart —
+# e.g. a Vault SecretClaim (if you have the CRD installed) that materialises
+# the Secret referenced by `envFromSecret`. Each entry may be a structured map
+# or a templated string.
+extraObjects: []

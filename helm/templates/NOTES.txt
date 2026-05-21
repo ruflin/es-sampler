@@ -1,0 +1,6 @@
+es-sampler is installed.
+
+Tail the loop:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -f
+
+Bump the verbosity at install time with `--set verbose=true`.

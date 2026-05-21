@@ -40,3 +40,19 @@ jobs:
           name: es-sampler-linux-amd64
           path: bin/es-sampler
           if-no-files-found: error
+
+  chart:
+    name: Lint and render Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: helm lint
+        run: helm lint helm
+
+      - name: helm template
+        run: helm template demo helm -f helm/ci/example-values.yaml
