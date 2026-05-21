@@ -2,7 +2,7 @@ module github.com/elastic/es-sampler
 
 go 1.24
 
-require github.com/elastic/go-elasticsearch/v8 v8.19.4
+require github.com/elastic/go-elasticsearch/v8 v8.19.6
 
 require (
 	github.com/elastic/elastic-transport-go/v8 v8.9.0 // indirect
