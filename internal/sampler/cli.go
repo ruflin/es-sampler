@@ -36,6 +36,7 @@ Sync options:
   SYNC_RANDOM_SEED             or  --random-seed      Fixed seed for sampling (omit for run-based seed)
   SYNC_TARGET_INDEX            or  --target-index     Single target index/stream (default: preserve original index names)
   SYNC_BATCH_SIZE              or  --batch-size       (default: same as --size)
+  SYNC_REQUEST_TIMEOUT         or  --request-timeout  Go duration for per-request timeout (default: 30s)
 
 Other:
   --env-file                   Path to a dotenv file to load before parsing env vars (default: .env)
@@ -46,19 +47,20 @@ Other:
 
 // rawFlags captures the raw CLI flag values (strings, pointer for presence).
 type rawFlags struct {
-	help          bool
-	verbose       bool
-	noVerifyCerts bool
-	sourceHost    *string
-	sourceAPIKey  *string
-	destAPIKey    *string
-	indexPattern  *string
-	size          *string
-	interval      *string
-	lookback      *string
-	randomSeed    *string
-	targetIndex   *string
-	batchSize     *string
+	help           bool
+	verbose        bool
+	noVerifyCerts  bool
+	sourceHost     *string
+	sourceAPIKey   *string
+	destAPIKey     *string
+	indexPattern   *string
+	size           *string
+	interval       *string
+	lookback       *string
+	randomSeed     *string
+	targetIndex    *string
+	batchSize      *string
+	requestTimeout *string
 }
 
 // parseArgs is a small custom parser supporting `--flag`, `--flag=value`,
@@ -156,6 +158,10 @@ func parseArgs(argv []string) (*rawFlags, error) {
 			if err := setString(&f.batchSize, value, hasEq, next); err != nil {
 				return nil, fmt.Errorf("--%s: %w", name, err)
 			}
+		case "request-timeout":
+			if err := setString(&f.requestTimeout, value, hasEq, next); err != nil {
+				return nil, fmt.Errorf("--%s: %w", name, err)
+			}
 		case "env-file":
 			// Parsed here so it isn't reported as unknown; the value is
 			// consumed in main.go before ParseConfig runs.
@@ -212,6 +218,7 @@ func ParseConfig(argv []string) (*Config, error) {
 	targetIndex := envOr(raw.targetIndex, "SYNC_TARGET_INDEX", "")
 	// batch size defaults to SYNC_SIZE when neither flag nor env is set.
 	batchSizeStr := envOr(raw.batchSize, "SYNC_BATCH_SIZE", sizeStr)
+	requestTimeoutStr := envOr(raw.requestTimeout, "SYNC_REQUEST_TIMEOUT", "30s")
 
 	destHost := envOr(nil, "ELASTICSEARCH_HOST", "http://localhost:9200")
 	destAPIKey := envOr(raw.destAPIKey, "ELASTICSEARCH_API_KEY", "")
@@ -251,22 +258,28 @@ func ParseConfig(argv []string) (*Config, error) {
 		return nil, fmt.Errorf("Error: --lookback must be a positive Go duration (e.g. 15m, 24h).")
 	}
 
+	requestTimeout, err := time.ParseDuration(requestTimeoutStr)
+	if err != nil || requestTimeout <= 0 {
+		return nil, fmt.Errorf("Error: --request-timeout must be a positive Go duration (e.g. 30s, 1m).")
+	}
+
 	cfg := &Config{
-		SourceHost:    strings.TrimRight(sourceHost, "/"),
-		SourceAPIKey:  sourceAPIKey,
-		DestHost:      strings.TrimRight(destHost, "/"),
-		DestAPIKey:    destAPIKey,
-		DestUsername:  destUser,
-		DestPassword:  destPass,
-		IndexPattern:  indexPattern,
-		Size:          size,
-		Interval:      time.Duration(intervalSeconds * float64(time.Second)),
-		Lookback:      lookback,
-		RandomSeed:    randomSeed,
-		TargetIndex:   targetIndex,
-		BatchSize:     batchSize,
-		NoVerifyCerts: raw.noVerifyCerts,
-		Verbose:       raw.verbose,
+		SourceHost:     strings.TrimRight(sourceHost, "/"),
+		SourceAPIKey:   sourceAPIKey,
+		DestHost:       strings.TrimRight(destHost, "/"),
+		DestAPIKey:     destAPIKey,
+		DestUsername:   destUser,
+		DestPassword:   destPass,
+		IndexPattern:   indexPattern,
+		Size:           size,
+		Interval:       time.Duration(intervalSeconds * float64(time.Second)),
+		Lookback:       lookback,
+		RandomSeed:     randomSeed,
+		TargetIndex:    targetIndex,
+		BatchSize:      batchSize,
+		RequestTimeout: requestTimeout,
+		NoVerifyCerts:  raw.noVerifyCerts,
+		Verbose:        raw.verbose,
 	}
 	return cfg, nil
 }
