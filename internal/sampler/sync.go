@@ -198,7 +198,7 @@ func ensureDataStreamExists(ctx context.Context, client *es.Client, name string,
 		return false
 	}
 
-	createCtx, cancel2 := context.WithTimeout(context.Background(), timeout)
+	createCtx, cancel2 := context.WithTimeout(ctx, timeout)
 	defer cancel2()
 	createRes, err := client.Indices.CreateDataStream(
 		name,
@@ -270,6 +270,11 @@ func uploadDocumentsToStream(
 				log.Logf("Bulk request failed: %v", err)
 				return
 			}
+			defer res.Body.Close()
+			if res.IsError() {
+				log.Logf("Bulk request failed: %s", res.String())
+				return
+			}
 
 			var parsed struct {
 				Errors bool `json:"errors"`
@@ -284,10 +289,8 @@ func uploadDocumentsToStream(
 			}
 			if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
 				log.Logf("Bulk request failed: %v", err)
-				res.Body.Close()
 				return
 			}
-			res.Body.Close()
 
 			if parsed.Errors {
 				for _, item := range parsed.Items {
