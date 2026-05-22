@@ -6,6 +6,12 @@ GO          ?= go
 GOFMT       ?= gofmt
 GO_FILES    := $(shell find . -type f -name '*.go' -not -path './.git/*')
 
+IMAGE_REGISTRY  ?= ghcr.io
+IMAGE_NAMESPACE ?= ruflin
+IMAGE_NAME      ?= es-sampler
+IMAGE_TAG       ?= dev
+IMAGE           ?= $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -63,6 +69,18 @@ tidy-check: ## Fail if go.mod / go.sum would be changed by tidy
 
 .PHONY: check
 check: lint test build ## Run lint + test + build (CI entry point)
+
+.PHONY: image
+image: ## Build the container image (override IMAGE=... or IMAGE_TAG=... to retag)
+	docker build \
+	  --build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+	  --build-arg SOURCE_COMMIT=$$(git rev-parse HEAD) \
+	  --build-arg VERSION=$(IMAGE_TAG) \
+	  -t $(IMAGE) .
+
+.PHONY: push
+push: image ## Build and push the image (must be logged in to $(IMAGE_REGISTRY) first)
+	docker push $(IMAGE)
 
 .PHONY: clean
 clean: ## Remove build artifacts

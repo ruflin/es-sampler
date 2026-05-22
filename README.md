@@ -133,6 +133,7 @@ When `ELASTICSEARCH_API_KEY` / `--dest-api-key` is set it takes precedence over 
 | `SYNC_RANDOM_SEED` | `--random-seed` | — |
 | `SYNC_TARGET_INDEX` | `--target-index` | preserve original |
 | `SYNC_BATCH_SIZE` | `--batch-size` | same as `SYNC_SIZE` |
+| `SYNC_REQUEST_TIMEOUT` | `--request-timeout` | `30s` |
 
 ### Other
 
@@ -140,6 +141,35 @@ When `ELASTICSEARCH_API_KEY` / `--dest-api-key` is set it takes precedence over 
 - `--no-verify-certs` — Disable TLS verification.
 - `--verbose`, `-v` — Verbose logging (adds ISO timestamps).
 - `--help`, `-h` — Show help.
+
+## Docker
+
+Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are published to GitHub Container Registry on every push to `main` and on `v*.*.*` tags:
+
+```bash
+docker run --rm \
+  -e SOURCE_ELASTICSEARCH_HOST=https://source.example.cloud.es.io:443 \
+  -e SOURCE_ELASTICSEARCH_API_KEY=... \
+  -e ELASTICSEARCH_HOST=https://destination.example.cloud.es.io:443 \
+  -e ELASTICSEARCH_API_KEY=... \
+  ghcr.io/ruflin/es-sampler:latest
+```
+
+Available tags:
+
+- `latest` — most recent `main` build.
+- `sha-<short>` — every `main` build, immutable.
+- `vX.Y.Z`, `vX.Y` — released versions (when tagged).
+
+The image is built from `cgr.dev/chainguard/static`, runs as `nonroot` (UID 65532), and contains only the `es-sampler` binary — no shell, no package manager.
+
+Build locally:
+
+```bash
+make image                    # builds ghcr.io/ruflin/es-sampler:dev
+make image IMAGE_TAG=v1.2.3   # override the tag
+make push                     # build + push (login to ghcr.io first)
+```
 
 ## Development
 
@@ -154,6 +184,8 @@ make fmt          # gofmt -w
 make tidy         # go mod tidy
 make check        # lint + test + build (what CI runs, alongside tidy-check)
 make run ARGS="--help"
+make image        # docker build, tag as $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)
+make push         # docker push (requires prior login)
 ```
 
 CI runs `make tidy-check`, `make lint`, `make test`, and `make build` on every
